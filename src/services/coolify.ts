@@ -7,7 +7,7 @@ const coolifyApi: AxiosInstance = axios.create({
     Authorization: `Bearer ${config.coolify.apiToken}`,
     "Content-Type": "application/json",
   },
-  timeout: 30000,
+  timeout: 120000,
 });
 
 function generateOpenClawCompose(
@@ -60,13 +60,15 @@ export async function createOpenClawService(
   const gatewayToken = generateGatewayToken();
   const composeRaw = generateOpenClawCompose(userId, gatewayToken);
 
+  const composeBase64 = Buffer.from(composeRaw).toString("base64");
+
   const response = await coolifyApi.post<CoolifyServiceResponse>(
     "/api/v1/services",
     {
       project_uuid: config.coolify.projectUuid,
       environment_uuid: config.coolify.environmentUuid,
       server_uuid: config.coolify.serverUuid,
-      docker_compose_raw: composeRaw,
+      docker_compose_raw: composeBase64,
       name: `openclaw-user-${userId}`,
       description: `OpenClaw instance for user ${userId}`,
       instant_deploy: true,
