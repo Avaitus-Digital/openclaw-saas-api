@@ -27,6 +27,8 @@ services:
       - OPENCLAW_GATEWAY_TOKEN=${gatewayToken}
     ports:
       - "18789"
+    networks:
+      - coolify
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:18789/healthz"]
       interval: 30s
@@ -36,6 +38,10 @@ services:
 volumes:
   openclaw_config_${userId}:
   openclaw_workspace_${userId}:
+
+networks:
+  coolify:
+    external: true
 `.trim();
 }
 
