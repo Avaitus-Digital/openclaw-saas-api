@@ -114,20 +114,6 @@ export async function getServiceStatus(
   }
 }
 
-export async function getServiceContainerName(
-  serviceUuid: string
-): Promise<string | null> {
-  try {
-    const response = await coolifyApi.get(`/api/v1/services/${serviceUuid}`);
-    const apps = response.data.applications || response.data.services || [];
-    if (apps.length > 0) {
-      return apps[0].container_name || apps[0].name || null;
-    }
-    const compose = response.data.docker_compose || "";
-    const nameMatch = compose.match(/container_name:\s*(\S+)/);
-    if (nameMatch) return nameMatch[1];
-    return serviceUuid;
-  } catch {
-    return null;
-  }
+export function getContainerUrl(serviceUuid: string): string {
+  return `http://openclaw-${serviceUuid}:18789`;
 }
