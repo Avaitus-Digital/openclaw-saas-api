@@ -25,6 +25,8 @@ services:
     environment:
       - OPENROUTER_API_KEY=${config.openrouter.apiKey}
       - OPENCLAW_GATEWAY_TOKEN=${gatewayToken}
+      - OPENCLAW_GATEWAY_BIND=lan
+      - OPENCLAW_PRIMARY_MODEL=openrouter/google/gemini-2.5-flash
     ports:
       - "18789"
     networks:
@@ -34,6 +36,12 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    entrypoint: >
+      sh -c '
+      mkdir -p /data/.openclaw &&
+      echo "{\"gateway\":{\"bind\":\"lan\",\"http\":{\"endpoints\":{\"chatCompletions\":{\"enabled\":true},\"responses\":{\"enabled\":true}}},\"auth\":{\"mode\":\"token\",\"token\":\"${gatewayToken}\"}},\"agents\":{\"defaults\":{\"model\":{\"primary\":\"openrouter/google/gemini-2.5-flash\"}}}}" > /data/.openclaw/openclaw.json &&
+      exec node dist/index.js
+      '
 
 volumes:
   openclaw_config_${userId}:
