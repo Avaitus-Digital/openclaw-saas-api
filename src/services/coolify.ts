@@ -14,47 +14,48 @@ function generateOpenClawCompose(
   userId: number,
   gatewayToken: string
 ): string {
-  const configJson = JSON.stringify({
-    gateway: {
-      bind: "lan",
-      http: { endpoints: { chatCompletions: { enabled: true }, responses: { enabled: true } } },
-      auth: { mode: "token", token: gatewayToken },
-    },
-    agents: { defaults: { model: { primary: "openrouter/google/gemini-2.5-flash" } } },
-  });
-
   return `
 services:
   openclaw:
-    image: ghcr.io/openclaw/openclaw:latest
-    user: "0"
-    restart: unless-stopped
-    volumes:
-      - openclaw_data_${userId}:/data
+    image: coollabsio/openclaw:2026.2.6
     environment:
       - OPENROUTER_API_KEY=${config.openrouter.apiKey}
       - OPENCLAW_GATEWAY_TOKEN=${gatewayToken}
-      - OPENCLAW_GATEWAY_BIND=lan
       - OPENCLAW_PRIMARY_MODEL=openrouter/google/gemini-2.5-flash
+      - PORT=8080
+      - OPENCLAW_GATEWAY_PORT=18789
+      - OPENCLAW_GATEWAY_BIND=lan
       - OPENCLAW_STATE_DIR=/data/.openclaw
       - OPENCLAW_WORKSPACE_DIR=/data/workspace
-    ports:
-      - "18789"
+    volumes:
+      - openclaw-data-${userId}:/data
+    depends_on:
+      browser:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:18789/healthz"]
-      interval: 30s
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
       timeout: 10s
       retries: 5
-    entrypoint:
-      - sh
-      - -c
-      - |
-        mkdir -p /data/.openclaw /data/workspace
-        echo '${configJson}' > /data/.openclaw/openclaw.json
-        exec node dist/index.js
+  browser:
+    image: coollabsio/openclaw-browser:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - CHROME_CLI=--remote-debugging-port=9222
+    volumes:
+      - browser-data-${userId}:/config
+    shm_size: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/9222' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
-  openclaw_data_${userId}:
+  openclaw-data-${userId}:
+  browser-data-${userId}:
 `.trim();
 }
 
@@ -89,27 +90,22 @@ export async function createOpenClawService(
       docker_compose_raw: composeBase64,
       name: `openclaw-user-${userId}`,
       description: `OpenClaw instance for user ${userId}`,
-      instant_deploy: true,
+      connect_to_docker_network: true,
+      instant_deploy: false,
     }
   );
 
   const serviceUuid = response.data.uuid;
 
-  // Wait for container to start, then connect it to the coolify network
-  setTimeout(async () => {
-    const containerName = `openclaw-${serviceUuid}`;
-    try {
-      await coolifyApi.post(
-        `/api/v1/servers/${config.coolify.serverUuid}/commands`,
-        { command: `docker network connect coolify ${containerName} 2>/dev/null || true` }
-      );
-    } catch {
-      console.warn(
-        `Auto-connect to coolify network failed for ${containerName}. ` +
-        `Run manually: docker network connect coolify ${containerName}`
-      );
-    }
-  }, 30000);
+  try {
+    await coolifyApi.patch(`/api/v1/services/${serviceUuid}`, {
+      connect_to_docker_network: true,
+    });
+  } catch (err) {
+    console.warn("PATCH connect_to_docker_network failed:", err);
+  }
+
+  await coolifyApi.post(`/api/v1/services/${serviceUuid}/start`);
 
   return { serviceUuid, gatewayToken };
 }
@@ -149,4 +145,8 @@ export async function getServiceStatus(
 
 export function getContainerUrl(serviceUuid: string): string {
   return `http://openclaw-${serviceUuid}:18789`;
+}
+
+export function getContainerUrl8080(serviceUuid: string): string {
+  return `http://openclaw-${serviceUuid}:8080`;
 }
