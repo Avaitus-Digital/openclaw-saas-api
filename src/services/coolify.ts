@@ -80,9 +80,21 @@ export async function createOpenClawService(
       name: `openclaw-user-${userId}`,
       description: `OpenClaw instance for user ${userId}`,
       connect_to_docker_network: true,
-      instant_deploy: true,
+      instant_deploy: false,
     }
   );
+
+  const serviceUuid = response.data.uuid;
+
+  try {
+    await coolifyApi.patch(`/api/v1/services/${serviceUuid}`, {
+      connect_to_docker_network: true,
+    });
+  } catch (err) {
+    console.warn("Failed to set network via PATCH, trying alternative:", err);
+  }
+
+  await coolifyApi.post(`/api/v1/services/${serviceUuid}/start`);
 
   return {
     serviceUuid: response.data.uuid,
