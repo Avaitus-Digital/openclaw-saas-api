@@ -14,19 +14,30 @@ function generateOpenClawCompose(
   userId: number,
   gatewayToken: string
 ): string {
+  const configJson = JSON.stringify({
+    gateway: {
+      bind: "lan",
+      http: { endpoints: { chatCompletions: { enabled: true }, responses: { enabled: true } } },
+      auth: { mode: "token", token: gatewayToken },
+    },
+    agents: { defaults: { model: { primary: "openrouter/google/gemini-2.5-flash" } } },
+  });
+
   return `
 services:
   openclaw:
     image: ghcr.io/openclaw/openclaw:latest
+    user: "0"
     restart: unless-stopped
     volumes:
-      - openclaw_config_${userId}:/data/.openclaw
-      - openclaw_workspace_${userId}:/data/workspace
+      - openclaw_data_${userId}:/data
     environment:
       - OPENROUTER_API_KEY=${config.openrouter.apiKey}
       - OPENCLAW_GATEWAY_TOKEN=${gatewayToken}
       - OPENCLAW_GATEWAY_BIND=lan
       - OPENCLAW_PRIMARY_MODEL=openrouter/google/gemini-2.5-flash
+      - OPENCLAW_STATE_DIR=/data/.openclaw
+      - OPENCLAW_WORKSPACE_DIR=/data/workspace
     ports:
       - "18789"
     healthcheck:
@@ -34,16 +45,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-    entrypoint: >
-      sh -c '
-      mkdir -p /data/.openclaw &&
-      echo "{\"gateway\":{\"bind\":\"lan\",\"http\":{\"endpoints\":{\"chatCompletions\":{\"enabled\":true},\"responses\":{\"enabled\":true}}},\"auth\":{\"mode\":\"token\",\"token\":\"${gatewayToken}\"}},\"agents\":{\"defaults\":{\"model\":{\"primary\":\"openrouter/google/gemini-2.5-flash\"}}}}" > /data/.openclaw/openclaw.json &&
-      exec node dist/index.js
-      '
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mkdir -p /data/.openclaw /data/workspace
+        echo '${configJson}' > /data/.openclaw/openclaw.json
+        exec node dist/index.js
 
 volumes:
-  openclaw_config_${userId}:
-  openclaw_workspace_${userId}:
+  openclaw_data_${userId}:
 `.trim();
 }
 
