@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import { AuthRequest, authMiddleware } from "../middleware/auth";
-import { getInstanceByUserId } from "../db/queries";
+import { getInstanceByUserId, updateInstanceUrl } from "../db/queries";
 import { sendChatMessage, ChatMessage } from "../services/openclaw";
+import { getServiceContainerName } from "../services/coolify";
 
 const router = Router();
 
@@ -34,11 +35,27 @@ router.post(
         return;
       }
 
-      if (!instance.gateway_token || !instance.internal_url) {
+      if (!instance.gateway_token) {
         res.status(503).json({
           error: "Instance is still being set up. Try again in a moment.",
         });
         return;
+      }
+
+      if (!instance.internal_url && instance.coolify_service_uuid) {
+        const containerName = await getServiceContainerName(
+          instance.coolify_service_uuid
+        );
+        if (containerName) {
+          const url = `http://${containerName}:18789`;
+          await updateInstanceUrl(userId, url);
+          instance.internal_url = url;
+        } else {
+          res.status(503).json({
+            error: "Instance is still being set up. Try again in a moment.",
+          });
+          return;
+        }
       }
 
       const messages: ChatMessage[] = [];
@@ -57,8 +74,8 @@ router.post(
       messages.push({ role: "user", content: message });
 
       const response = await sendChatMessage(
-        instance.internal_url,
-        instance.gateway_token,
+        instance.internal_url!,
+        instance.gateway_token!,
         messages
       );
 
