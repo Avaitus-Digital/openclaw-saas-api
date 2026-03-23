@@ -29,8 +29,6 @@ services:
       - OPENCLAW_PRIMARY_MODEL=openrouter/google/gemini-2.5-flash
     ports:
       - "18789"
-    networks:
-      - coolify
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:18789/healthz"]
       interval: 30s
@@ -46,10 +44,6 @@ services:
 volumes:
   openclaw_config_${userId}:
   openclaw_workspace_${userId}:
-
-networks:
-  coolify:
-    external: true
 `.trim();
 }
 
@@ -85,6 +79,7 @@ export async function createOpenClawService(
       docker_compose_raw: composeBase64,
       name: `openclaw-user-${userId}`,
       description: `OpenClaw instance for user ${userId}`,
+      connect_to_docker_network: true,
       instant_deploy: true,
     }
   );
