@@ -67,7 +67,6 @@ export async function createOpenClawService(
 ): Promise<{ serviceUuid: string; gatewayToken: string }> {
   const gatewayToken = generateGatewayToken();
   const composeRaw = generateOpenClawCompose(userId, gatewayToken);
-
   const composeBase64 = Buffer.from(composeRaw).toString("base64");
 
   const response = await coolifyApi.post<CoolifyServiceResponse>(
@@ -79,27 +78,29 @@ export async function createOpenClawService(
       docker_compose_raw: composeBase64,
       name: `openclaw-user-${userId}`,
       description: `OpenClaw instance for user ${userId}`,
-      connect_to_docker_network: true,
-      instant_deploy: false,
+      instant_deploy: true,
     }
   );
 
   const serviceUuid = response.data.uuid;
 
-  try {
-    await coolifyApi.patch(`/api/v1/services/${serviceUuid}`, {
-      connect_to_docker_network: true,
-    });
-  } catch (err) {
-    console.warn("Failed to set network via PATCH, trying alternative:", err);
-  }
+  // Wait for container to start, then connect it to the coolify network
+  setTimeout(async () => {
+    const containerName = `openclaw-${serviceUuid}`;
+    try {
+      await coolifyApi.post(
+        `/api/v1/servers/${config.coolify.serverUuid}/commands`,
+        { command: `docker network connect coolify ${containerName} 2>/dev/null || true` }
+      );
+    } catch {
+      console.warn(
+        `Auto-connect to coolify network failed for ${containerName}. ` +
+        `Run manually: docker network connect coolify ${containerName}`
+      );
+    }
+  }, 30000);
 
-  await coolifyApi.post(`/api/v1/services/${serviceUuid}/start`);
-
-  return {
-    serviceUuid: response.data.uuid,
-    gatewayToken,
-  };
+  return { serviceUuid, gatewayToken };
 }
 
 export async function deleteOpenClawService(
