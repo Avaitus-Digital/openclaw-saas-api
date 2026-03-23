@@ -29,9 +29,16 @@ router.post("/signup", async (req: Request, res: Response) => {
       return;
     }
 
-    const stripeCustomer = await createCustomer(email);
+    let stripeCustomerId: string | undefined;
+    try {
+      const stripeCustomer = await createCustomer(email);
+      stripeCustomerId = stripeCustomer.id;
+    } catch {
+      console.warn("Stripe not configured, skipping customer creation");
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await createUser(email, passwordHash, stripeCustomer.id);
+    const user = await createUser(email, passwordHash, stripeCustomerId);
 
     const token = jwt.sign({ userId: user.id }, config.jwt.secret, {
       expiresIn: "7d" as any,
