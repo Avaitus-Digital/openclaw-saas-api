@@ -29,33 +29,14 @@ services:
       - OPENCLAW_WORKSPACE_DIR=/data/workspace
     volumes:
       - openclaw-data-${userId}:/data
-    depends_on:
-      browser:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/healthz"]
       interval: 10s
       timeout: 10s
       retries: 5
-  browser:
-    image: coollabsio/openclaw-browser:latest
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - CHROME_CLI=--remote-debugging-port=9222
-    volumes:
-      - browser-data-${userId}:/config
-    shm_size: 2g
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/9222' || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
 volumes:
   openclaw-data-${userId}:
-  browser-data-${userId}:
 `.trim();
 }
 
@@ -90,8 +71,7 @@ export async function createOpenClawService(
       docker_compose_raw: composeBase64,
       name: `openclaw-user-${userId}`,
       description: `OpenClaw instance for user ${userId}`,
-      connect_to_docker_network: true,
-      instant_deploy: false,
+      instant_deploy: true,
     }
   );
 
@@ -101,11 +81,10 @@ export async function createOpenClawService(
     await coolifyApi.patch(`/api/v1/services/${serviceUuid}`, {
       connect_to_docker_network: true,
     });
+    console.log(`Set connect_to_docker_network for ${serviceUuid}`);
   } catch (err) {
-    console.warn("PATCH connect_to_docker_network failed:", err);
+    console.warn("PATCH connect_to_docker_network failed, will connect manually later");
   }
-
-  await coolifyApi.post(`/api/v1/services/${serviceUuid}/start`);
 
   return { serviceUuid, gatewayToken };
 }
@@ -145,8 +124,4 @@ export async function getServiceStatus(
 
 export function getContainerUrl(serviceUuid: string): string {
   return `http://openclaw-${serviceUuid}:18789`;
-}
-
-export function getContainerUrl8080(serviceUuid: string): string {
-  return `http://openclaw-${serviceUuid}:8080`;
 }
