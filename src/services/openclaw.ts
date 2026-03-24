@@ -1,4 +1,4 @@
-import WebSocket from "ws";
+import axios from "axios";
 
 export interface ChatResponse {
   message: string;
@@ -8,84 +8,29 @@ export async function sendChatMessage(
   containerHost: string,
   message: string
 ): Promise<ChatResponse> {
-  return new Promise((resolve, reject) => {
-    const wsUrl = `ws://${containerHost}:42617/ws/chat`;
-    const ws = new WebSocket(wsUrl);
-    let fullResponse = "";
-    let resolved = false;
+  const response = await axios.post(
+    `http://${containerHost}:42617/webhook`,
+    { message },
+    { timeout: 120000 }
+  );
 
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        ws.close();
-        reject(new Error("Chat request timed out after 120 seconds"));
-      }
-    }, 120000);
+  const reply =
+    response.data?.response ||
+    response.data?.message ||
+    response.data?.content ||
+    (typeof response.data === "string" ? response.data : JSON.stringify(response.data));
 
-    ws.on("open", () => {
-      ws.send(JSON.stringify({ type: "message", content: message }));
-    });
-
-    ws.on("message", (data: Buffer) => {
-      try {
-        const msg = JSON.parse(data.toString());
-
-        switch (msg.type) {
-          case "chunk":
-            fullResponse += msg.content || "";
-            break;
-          case "done":
-            if (!resolved) {
-              resolved = true;
-              clearTimeout(timeout);
-              ws.close();
-              resolve({
-                message: msg.full_response || fullResponse || "No response",
-              });
-            }
-            break;
-          case "error":
-            if (!resolved) {
-              resolved = true;
-              clearTimeout(timeout);
-              ws.close();
-              reject(new Error(msg.message || "ZeroClaw error"));
-            }
-            break;
-        }
-      } catch {
-        // ignore parse errors for non-JSON messages
-      }
-    });
-
-    ws.on("error", (err: Error) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        reject(err);
-      }
-    });
-
-    ws.on("close", () => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        if (fullResponse) {
-          resolve({ message: fullResponse });
-        } else {
-          reject(new Error("WebSocket closed before response"));
-        }
-      }
-    });
-  });
+  return { message: reply };
 }
 
 export async function checkContainerHealth(
   containerHost: string
 ): Promise<boolean> {
   try {
-    const response = await fetch(`http://${containerHost}:42617/health`);
-    return response.ok;
+    const response = await axios.get(`http://${containerHost}:42617/health`, {
+      timeout: 5000,
+    });
+    return response.status === 200;
   } catch {
     return false;
   }
