@@ -93,10 +93,21 @@ export async function createOpenClawService(
     }
   );
 
-  return {
-    serviceUuid: response.data.uuid,
-    gatewayToken,
-  };
+  const serviceUuid = response.data.uuid;
+
+  // Enable predefined network so backend can reach the container
+  try {
+    await coolifyApi.patch(`/api/v1/services/${serviceUuid}`, {
+      connect_to_docker_network: true,
+    });
+    // Restart to apply network change
+    await coolifyApi.post(`/api/v1/services/${serviceUuid}/restart`);
+    console.log(`Service ${serviceUuid}: network enabled and restarted`);
+  } catch (err) {
+    console.warn(`Failed to auto-configure network for ${serviceUuid}:`, err);
+  }
+
+  return { serviceUuid, gatewayToken };
 }
 
 export async function deleteOpenClawService(
