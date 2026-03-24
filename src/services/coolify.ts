@@ -14,36 +14,10 @@ function generateOpenClawCompose(
   userId: number,
   gatewayToken: string
 ): string {
-  const initConfig = JSON.stringify({
-    gateway: {
-      bind: "lan",
-      http: {
-        endpoints: {
-          chatCompletions: { enabled: true },
-          responses: { enabled: true },
-        },
-      },
-      auth: { mode: "token", token: gatewayToken },
-    },
-    agents: {
-      defaults: {
-        model: { primary: "openrouter/google/gemini-2.5-flash" },
-      },
-    },
-  });
-
   return `
 services:
-  init:
-    image: alpine
-    volumes:
-      - openclaw-data-${userId}:/data
-    command: ["sh", "-c", "mkdir -p /data/.openclaw /data/workspace && echo '${initConfig}' > /data/.openclaw/openclaw.json && echo config-ready"]
   openclaw:
     image: coollabsio/openclaw:2026.2.6
-    depends_on:
-      init:
-        condition: service_completed_successfully
     environment:
       - OPENROUTER_API_KEY=${config.openrouter.apiKey}
       - OPENCLAW_GATEWAY_TOKEN=${gatewayToken}
@@ -101,18 +75,10 @@ export async function createOpenClawService(
     }
   );
 
-  const serviceUuid = response.data.uuid;
-
-  try {
-    await coolifyApi.patch(`/api/v1/services/${serviceUuid}`, {
-      connect_to_docker_network: true,
-    });
-    console.log(`Set connect_to_docker_network for ${serviceUuid}`);
-  } catch (err) {
-    console.warn("PATCH connect_to_docker_network failed, will connect manually later");
-  }
-
-  return { serviceUuid, gatewayToken };
+  return {
+    serviceUuid: response.data.uuid,
+    gatewayToken,
+  };
 }
 
 export async function deleteOpenClawService(
