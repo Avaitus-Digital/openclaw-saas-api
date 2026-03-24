@@ -23,7 +23,6 @@ services:
       - ZEROCLAW_GATEWAY_PORT=42617
     volumes:
       - zeroclaw-data-${userId}:/zeroclaw-data
-    command: ["bash", "-c", "sed -i '/\\[gateway\\]/a require_pairing = false' /zeroclaw-data/.zeroclaw/config.toml && exec zeroclaw daemon"]
     healthcheck:
       test: ["CMD", "zeroclaw", "status", "--format=exit-code"]
       interval: 60s
