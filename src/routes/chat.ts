@@ -1,8 +1,7 @@
 import { Router, Response } from "express";
 import { AuthRequest, authMiddleware } from "../middleware/auth";
-import { getInstanceByUserId, updateInstanceUrl } from "../db/queries";
-import { sendChatMessage, ChatMessage } from "../services/openclaw";
-import { getContainerUrl } from "../services/coolify";
+import { getInstanceByUserId } from "../db/queries";
+import { sendChatMessage } from "../services/openclaw";
 
 const router = Router();
 
@@ -12,7 +11,7 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.userId!;
-      const { message, history } = req.body;
+      const { message } = req.body;
 
       if (!message) {
         res.status(400).json({ error: "Message is required" });
@@ -24,7 +23,7 @@ router.post(
       if (!instance) {
         res
           .status(404)
-          .json({ error: "No OpenClaw instance found. Launch one first." });
+          .json({ error: "No ZeroClaw instance found. Launch one first." });
         return;
       }
 
@@ -35,54 +34,25 @@ router.post(
         return;
       }
 
-      if (!instance.gateway_token) {
+      if (!instance.internal_url) {
         res.status(503).json({
           error: "Instance is still being set up. Try again in a moment.",
         });
         return;
       }
 
-      if (!instance.internal_url && instance.coolify_service_uuid) {
-        const url = getContainerUrl(instance.coolify_service_uuid);
-        await updateInstanceUrl(userId, url);
-        instance.internal_url = url;
-      }
-
-      const messages: ChatMessage[] = [];
-
-      if (history && Array.isArray(history)) {
-        for (const msg of history) {
-          if (msg.role && msg.content) {
-            messages.push({
-              role: msg.role,
-              content: msg.content,
-            });
-          }
-        }
-      }
-
-      messages.push({ role: "user", content: message });
-
-      const response = await sendChatMessage(
-        instance.internal_url!,
-        instance.gateway_token!,
-        messages
-      );
-
-      const assistantMessage =
-        response.choices[0]?.message?.content || "No response";
+      const response = await sendChatMessage(instance.internal_url, message);
 
       res.json({
-        message: assistantMessage,
-        usage: response.usage,
+        message: response.message,
       });
     } catch (err: any) {
-      console.error("Chat error:", err?.response?.data || err?.message || err);
+      console.error("Chat error:", err?.message || err);
 
       if (err?.code === "ECONNREFUSED" || err?.code === "ETIMEDOUT") {
         res.status(503).json({
           error:
-            "OpenClaw instance is not reachable. It may be starting up or stopped.",
+            "ZeroClaw instance is not reachable. It may be starting up or stopped.",
         });
         return;
       }

@@ -1,58 +1,91 @@
-import axios from "axios";
+import WebSocket from "ws";
 
-export interface ChatMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
-
-export interface ChatCompletionResponse {
-  id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: Array<{
-    index: number;
-    message: ChatMessage;
-    finish_reason: string;
-  }>;
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
+export interface ChatResponse {
+  message: string;
 }
 
 export async function sendChatMessage(
-  containerUrl: string,
-  gatewayToken: string,
-  messages: ChatMessage[]
-): Promise<ChatCompletionResponse> {
-  const response = await axios.post<ChatCompletionResponse>(
-    `${containerUrl}/v1/chat/completions`,
-    {
-      model: "openclaw",
-      messages,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${gatewayToken}`,
-        "Content-Type": "application/json",
-      },
-      timeout: 120000,
-    }
-  );
+  containerHost: string,
+  message: string
+): Promise<ChatResponse> {
+  return new Promise((resolve, reject) => {
+    const wsUrl = `ws://${containerHost}:42617/ws/chat`;
+    const ws = new WebSocket(wsUrl);
+    let fullResponse = "";
+    let resolved = false;
 
-  return response.data;
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        ws.close();
+        reject(new Error("Chat request timed out after 120 seconds"));
+      }
+    }, 120000);
+
+    ws.on("open", () => {
+      ws.send(JSON.stringify({ type: "message", content: message }));
+    });
+
+    ws.on("message", (data: Buffer) => {
+      try {
+        const msg = JSON.parse(data.toString());
+
+        switch (msg.type) {
+          case "chunk":
+            fullResponse += msg.content || "";
+            break;
+          case "done":
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              ws.close();
+              resolve({
+                message: msg.full_response || fullResponse || "No response",
+              });
+            }
+            break;
+          case "error":
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              ws.close();
+              reject(new Error(msg.message || "ZeroClaw error"));
+            }
+            break;
+        }
+      } catch {
+        // ignore parse errors for non-JSON messages
+      }
+    });
+
+    ws.on("error", (err: Error) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        reject(err);
+      }
+    });
+
+    ws.on("close", () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        if (fullResponse) {
+          resolve({ message: fullResponse });
+        } else {
+          reject(new Error("WebSocket closed before response"));
+        }
+      }
+    });
+  });
 }
 
 export async function checkContainerHealth(
-  containerUrl: string
+  containerHost: string
 ): Promise<boolean> {
   try {
-    const response = await axios.get(`${containerUrl}/healthz`, {
-      timeout: 5000,
-    });
-    return response.status === 200;
+    const response = await fetch(`http://${containerHost}:42617/health`);
+    return response.ok;
   } catch {
     return false;
   }

@@ -10,62 +10,35 @@ const coolifyApi: AxiosInstance = axios.create({
   timeout: 120000,
 });
 
-function generateOpenClawCompose(
-  userId: number,
-  gatewayToken: string
-): string {
+function generateZeroClawCompose(userId: number): string {
   return `
 services:
-  openclaw:
-    image: coollabsio/openclaw:2026.2.6
+  zeroclaw:
+    image: ghcr.io/zeroclaw-labs/zeroclaw:debian
+    restart: unless-stopped
     environment:
-      - OPENROUTER_API_KEY=${config.openrouter.apiKey}
-      - OPENCLAW_GATEWAY_TOKEN=${gatewayToken}
-      - OPENCLAW_PRIMARY_MODEL=openrouter/google/gemini-2.5-flash
-      - PORT=8080
-      - OPENCLAW_GATEWAY_PORT=18789
-      - OPENCLAW_GATEWAY_BIND=lan
-      - OPENCLAW_STATE_DIR=/data/.openclaw
-      - OPENCLAW_WORKSPACE_DIR=/data/workspace
+      - API_KEY=${config.openrouter.apiKey}
+      - PROVIDER=openrouter
+      - ZEROCLAW_ALLOW_PUBLIC_BIND=true
+      - ZEROCLAW_GATEWAY_PORT=42617
     volumes:
-      - openclaw-data-${userId}:/data
-    depends_on:
-      browser:
-        condition: service_healthy
+      - zeroclaw-data-${userId}:/zeroclaw-data
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/healthz"]
-      interval: 10s
+      test: ["CMD", "zeroclaw", "status", "--format=exit-code"]
+      interval: 60s
       timeout: 10s
-      retries: 5
-  browser:
-    image: coollabsio/openclaw-browser:latest
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - CHROME_CLI=--remote-debugging-port=9222
-    volumes:
-      - browser-data-${userId}:/config
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/9222' || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 32M
 
 volumes:
-  openclaw-data-${userId}:
-  browser-data-${userId}:
+  zeroclaw-data-${userId}:
 `.trim();
-}
-
-function generateGatewayToken(): string {
-  const chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let token = "";
-  for (let i = 0; i < 64; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return token;
 }
 
 export interface CoolifyServiceResponse {
@@ -73,11 +46,10 @@ export interface CoolifyServiceResponse {
   domains?: string[];
 }
 
-export async function createOpenClawService(
+export async function createZeroClawService(
   userId: number
-): Promise<{ serviceUuid: string; gatewayToken: string }> {
-  const gatewayToken = generateGatewayToken();
-  const composeRaw = generateOpenClawCompose(userId, gatewayToken);
+): Promise<{ serviceUuid: string }> {
+  const composeRaw = generateZeroClawCompose(userId);
   const composeBase64 = Buffer.from(composeRaw).toString("base64");
 
   const response = await coolifyApi.post<CoolifyServiceResponse>(
@@ -87,54 +59,44 @@ export async function createOpenClawService(
       environment_uuid: config.coolify.environmentUuid,
       server_uuid: config.coolify.serverUuid,
       docker_compose_raw: composeBase64,
-      name: `openclaw-user-${userId}`,
-      description: `OpenClaw instance for user ${userId}`,
+      name: `zeroclaw-user-${userId}`,
+      description: `ZeroClaw instance for user ${userId}`,
       instant_deploy: true,
     }
   );
 
   const serviceUuid = response.data.uuid;
 
-  // Enable predefined network so backend can reach the container
   try {
     await coolifyApi.patch(`/api/v1/services/${serviceUuid}`, {
       connect_to_docker_network: true,
     });
-    // Restart to apply network change
     await coolifyApi.post(`/api/v1/services/${serviceUuid}/restart`);
     console.log(`Service ${serviceUuid}: network enabled and restarted`);
   } catch (err) {
     console.warn(`Failed to auto-configure network for ${serviceUuid}:`, err);
   }
 
-  return { serviceUuid, gatewayToken };
+  return { serviceUuid };
 }
 
-export async function deleteOpenClawService(
-  serviceUuid: string
-): Promise<void> {
+export async function deleteService(serviceUuid: string): Promise<void> {
   await coolifyApi.delete(`/api/v1/services/${serviceUuid}`);
 }
 
-export async function stopOpenClawService(serviceUuid: string): Promise<void> {
+export async function stopService(serviceUuid: string): Promise<void> {
   await coolifyApi.post(`/api/v1/services/${serviceUuid}/stop`);
 }
 
-export async function startOpenClawService(
-  serviceUuid: string
-): Promise<void> {
+export async function startService(serviceUuid: string): Promise<void> {
   await coolifyApi.post(`/api/v1/services/${serviceUuid}/start`);
 }
 
-export async function restartOpenClawService(
-  serviceUuid: string
-): Promise<void> {
+export async function restartService(serviceUuid: string): Promise<void> {
   await coolifyApi.post(`/api/v1/services/${serviceUuid}/restart`);
 }
 
-export async function getServiceStatus(
-  serviceUuid: string
-): Promise<string> {
+export async function getServiceStatus(serviceUuid: string): Promise<string> {
   try {
     const response = await coolifyApi.get(`/api/v1/services/${serviceUuid}`);
     return response.data.status || "unknown";
@@ -144,5 +106,5 @@ export async function getServiceStatus(
 }
 
 export function getContainerUrl(serviceUuid: string): string {
-  return `http://openclaw-${serviceUuid}:18789`;
+  return `zeroclaw-${serviceUuid}`;
 }

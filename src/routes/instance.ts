@@ -4,15 +4,17 @@ import {
   createInstance,
   getInstanceByUserId,
   updateInstanceStatus,
+  updateInstanceUrl,
   deleteInstance,
 } from "../db/queries";
 import {
-  createOpenClawService,
-  deleteOpenClawService,
-  stopOpenClawService,
-  startOpenClawService,
-  restartOpenClawService,
+  createZeroClawService,
+  deleteService,
+  stopService,
+  startService,
+  restartService,
   getServiceStatus,
+  getContainerUrl,
 } from "../services/coolify";
 
 const router = Router();
@@ -27,7 +29,7 @@ router.post(
       const existing = await getInstanceByUserId(userId);
       if (existing && existing.status !== "destroyed") {
         res.status(409).json({
-          error: "You already have an OpenClaw instance",
+          error: "You already have a ZeroClaw instance",
           instance: {
             status: existing.status,
             created_at: existing.created_at,
@@ -36,13 +38,14 @@ router.post(
         return;
       }
 
-      const { serviceUuid, gatewayToken } =
-        await createOpenClawService(userId);
+      const { serviceUuid } = await createZeroClawService(userId);
+      const containerHost = getContainerUrl(serviceUuid);
 
-      const instance = await createInstance(userId, serviceUuid, gatewayToken);
+      const instance = await createInstance(userId, serviceUuid, "");
+      await updateInstanceUrl(userId, containerHost);
 
       res.status(201).json({
-        message: "OpenClaw instance is being provisioned",
+        message: "ZeroClaw instance is being provisioned",
         instance: {
           id: instance.id,
           status: instance.status,
@@ -51,7 +54,7 @@ router.post(
       });
     } catch (err) {
       console.error("Launch error:", err);
-      res.status(500).json({ error: "Failed to launch OpenClaw instance" });
+      res.status(500).json({ error: "Failed to launch ZeroClaw instance" });
     }
   }
 );
@@ -113,7 +116,7 @@ router.post(
         return;
       }
 
-      await stopOpenClawService(instance.coolify_service_uuid);
+      await stopService(instance.coolify_service_uuid);
       await updateInstanceStatus(userId, "stopped");
 
       res.json({ message: "Instance stopped", status: "stopped" });
@@ -137,7 +140,7 @@ router.post(
         return;
       }
 
-      await startOpenClawService(instance.coolify_service_uuid);
+      await startService(instance.coolify_service_uuid);
       await updateInstanceStatus(userId, "running");
 
       res.json({ message: "Instance started", status: "running" });
@@ -161,7 +164,7 @@ router.post(
         return;
       }
 
-      await restartOpenClawService(instance.coolify_service_uuid);
+      await restartService(instance.coolify_service_uuid);
       await updateInstanceStatus(userId, "running");
 
       res.json({ message: "Instance restarted", status: "running" });
@@ -185,7 +188,7 @@ router.delete(
         return;
       }
 
-      await deleteOpenClawService(instance.coolify_service_uuid);
+      await deleteService(instance.coolify_service_uuid);
       await deleteInstance(userId);
 
       res.json({ message: "Instance destroyed" });

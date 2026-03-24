@@ -7,7 +7,7 @@ import {
   getInstanceByUserId,
   deleteInstance,
 } from "../db/queries";
-import { deleteOpenClawService } from "../services/coolify";
+import { deleteService } from "../services/coolify";
 
 const router = Router();
 
@@ -51,7 +51,7 @@ router.post("/stripe", async (req: Request, res: Response) => {
           const instance = await getInstanceByUserId(user.id);
           if (instance?.coolify_service_uuid) {
             try {
-              await deleteOpenClawService(instance.coolify_service_uuid);
+              await deleteService(instance.coolify_service_uuid);
               await deleteInstance(user.id);
               console.log(
                 `Destroyed OpenClaw instance for user ${user.id} after subscription cancellation`
