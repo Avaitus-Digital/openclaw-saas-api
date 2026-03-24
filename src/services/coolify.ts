@@ -17,8 +17,7 @@ function generateOpenClawCompose(
   return `
 services:
   openclaw:
-    image: openclaw-saas:latest
-    pull_policy: never
+    image: coollabsio/openclaw:2026.2.6
     environment:
       - OPENROUTER_API_KEY=${config.openrouter.apiKey}
       - OPENCLAW_GATEWAY_TOKEN=${gatewayToken}
