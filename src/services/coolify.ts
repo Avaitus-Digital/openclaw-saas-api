@@ -29,14 +29,32 @@ services:
       - OPENCLAW_WORKSPACE_DIR=/data/workspace
     volumes:
       - openclaw-data-${userId}:/data
+    depends_on:
+      browser:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:18789/healthz"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/healthz"]
       interval: 10s
       timeout: 10s
       retries: 5
+  browser:
+    image: coollabsio/openclaw-browser:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - CHROME_CLI=--remote-debugging-port=9222
+    volumes:
+      - browser-data-${userId}:/config
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/9222' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   openclaw-data-${userId}:
+  browser-data-${userId}:
 `.trim();
 }
 
