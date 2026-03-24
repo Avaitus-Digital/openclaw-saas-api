@@ -19,6 +19,7 @@ services:
     environment:
       - API_KEY=${config.openrouter.apiKey}
       - PROVIDER=openrouter
+      - ZEROCLAW_MODEL=google/gemini-2.5-flash
       - ZEROCLAW_ALLOW_PUBLIC_BIND=true
       - ZEROCLAW_GATEWAY_PORT=42617
     volumes:
