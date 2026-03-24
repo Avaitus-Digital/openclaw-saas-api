@@ -30,7 +30,7 @@ services:
     volumes:
       - openclaw-data-${userId}:/data
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:18789/healthz"]
       interval: 10s
       timeout: 10s
       retries: 5
