@@ -11,6 +11,21 @@ const coolifyApi: AxiosInstance = axios.create({
 });
 
 function generateZeroClawCompose(userId: number): string {
+  const configToml = [
+    `default_provider = "openrouter"`,
+    `api_key = "${config.openrouter.apiKey}"`,
+    ``,
+    `[gateway]`,
+    `port = 42617`,
+    `host = "[::]"`,
+    `allow_public_bind = true`,
+    `require_pairing = false`,
+    ``,
+    `[autonomy]`,
+    `level = "full"`,
+    `auto_approve = ["file_read", "file_write", "memory_recall", "memory_store", "web_search_tool"]`,
+  ].join("\\n");
+
   return `
 services:
   zeroclaw:
@@ -23,12 +38,13 @@ services:
       - ZEROCLAW_GATEWAY_PORT=42617
     volumes:
       - zeroclaw-data-${userId}:/zeroclaw-data
+    command: ["bash", "-c", "mkdir -p /zeroclaw-data/.zeroclaw && printf '${configToml}' > /zeroclaw-data/.zeroclaw/config.toml && exec zeroclaw daemon"]
     healthcheck:
       test: ["CMD", "zeroclaw", "status", "--format=exit-code"]
       interval: 60s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     deploy:
       resources:
         limits:
